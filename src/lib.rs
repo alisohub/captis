@@ -61,6 +61,8 @@ pub trait Capturer {
     fn capture_primary(&self) -> Result<RgbImage, Error>;
     /// Captures a single image from all the displays available and returns them.
     fn capture_all(&self) -> Result<Vec<RgbImage>, Error>;
+    /// Captures a single image from the custom display.
+    fn capture_custom(&self, display: Display) -> Result<RgbImage, Error>;
     /// Returns a reference to the currently available displays.
     fn displays(&self) -> &[Display];
     /// Refreshes the current displays.
@@ -76,6 +78,14 @@ pub struct Display {
 }
 
 impl Display {
+    pub fn new(
+        top: CoordinateType,
+        left: CoordinateType,
+        width: ProportionType,
+        height: ProportionType,
+    ) -> Display {
+        Display { top, left, width, height }
+    }
     pub fn width(&self) -> ProportionType {
         self.width
     }

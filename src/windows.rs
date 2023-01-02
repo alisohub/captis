@@ -172,6 +172,97 @@ impl Capturer for WindowsCapturer {
             Ok(image)
         }
     }
+
+    fn capture_custom(&self, display: Display) -> Result<RgbImage, WindowsError> {
+        use WindowsError::*;
+
+        let h_dc = self.h_dc;
+
+        let h_compatible_dc = self.h_compatible_dc;
+
+        let Display {
+            width,
+            height,
+            top,
+            left,
+        } = display;
+
+        unsafe {
+            let bitmap_info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: width,
+                    biHeight: -height,
+                    biPlanes: 1,
+                    biBitCount: self.bits_per_pixel,
+                    biCompression: BI_RGB,
+                    ..mem::zeroed()
+                },
+                ..mem::zeroed()
+            };
+
+            let mut data: *mut u8 = ptr::null_mut();
+
+            let compatible_bitmap = CreateDIBSection(
+                h_dc,
+                &bitmap_info as *const BITMAPINFO,
+                DIB_RGB_COLORS,
+                &mut data as *mut *mut u8 as _,
+                ptr::null_mut(),
+                0,
+            );
+
+            if compatible_bitmap.is_null() {
+                return Err(CreateDIBSectionFailed);
+            }
+
+            if SelectObject(h_compatible_dc as _, compatible_bitmap as _).is_null() {
+                return Err(SelectObjectFailed);
+            }
+
+            if BitBlt(
+                h_compatible_dc,
+                0,
+                0,
+                width,
+                height,
+                h_dc,
+                left,
+                top,
+                SRCCOPY | CAPTUREBLT,
+            ) == 0
+            {
+                return Err(BitBltFailed);
+            }
+
+            let slice = std::slice::from_raw_parts(data as *mut RGBQUAD, (width * height) as usize);
+
+            let (width, height) = (width as u32, height as u32);
+
+            let mut image: RgbImage = RgbImage::new(width, height);
+
+            let mut i = 0;
+
+            for y in 0..height {
+                for x in 0..width {
+                    let RGBQUAD {
+                        rgbBlue,
+                        rgbGreen,
+                        rgbRed,
+                        ..
+                    } = slice[i];
+                    image.put_pixel(x, y, Rgb([rgbRed, rgbGreen, rgbBlue]));
+                    i += 1;
+                }
+            }
+
+            if DeleteObject(compatible_bitmap as _) == 0 {
+                return Err(DeleteObjectFailed);
+            }
+
+            Ok(image)
+        }
+    }
 }
 
 impl WindowsCapturer {
